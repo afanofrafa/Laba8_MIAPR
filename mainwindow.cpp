@@ -5,7 +5,16 @@
 #include <vector>
 #include <map>
 #include <random>
-map<QString, vector<QString>> grammar;
+struct Production {
+    QString terminal = "";
+    QString non_terminal = "";
+    // Перегрузка оператора "==" для сравнения Production на равенство
+    bool operator==(const Production& other) const {
+        return (terminal == other.terminal) && (non_terminal == other.non_terminal);
+    }
+};
+
+map<QString, vector<Production>> grammar;
 vector<QString> residual_rules;
 vector<QString> res_rules;
 vector<QString> rr_rules;
@@ -79,10 +88,10 @@ void MainWindow::on_pushButton_add_lines_ready_clicked()
         break;
     }
     case 4: {
-        ui->listWidget_lines->addItem("what");
-        ui->listWidget_lines->addItem("wht");
+        ui->listWidget_lines->addItem("what?");
+        ui->listWidget_lines->addItem("wht?");
         ui->listWidget_lines->addItem("w?");
-        ui->listWidget_lines->addItem("whaaaat");
+        ui->listWidget_lines->addItem("whaaaat?");
         break;
     }
     }
@@ -90,15 +99,20 @@ void MainWindow::on_pushButton_add_lines_ready_clicked()
     ui->pushButton_stage_1->setEnabled(true);
 }
 
+// Функция для сравнения строк по длине (для сортировки)
+bool compareByLength(const QString& a, const QString& b) {
+    return a.size() > b.size(); // Сортировка по убыванию длины
+}
 
 void MainWindow::on_pushButton_stage_1_clicked()
 {
+
     ui->listWidget_stage_1->clear();
     ui->listWidget_residual_rules->clear();
     grammar.clear();
-    rr_rules.clear();
-    res_rules.clear();
     residual_rules.clear();
+    res_rules.clear();
+    rr_rules.clear();
     vector<QString> strings;
     int max_size = 0;
     for (int i = 0; i < ui->listWidget_lines->count(); i++) {
@@ -106,10 +120,107 @@ void MainWindow::on_pushButton_stage_1_clicked()
         if (max_size < strings.at(i).size())
             max_size = strings.at(i).size();
     }
+    // Сортировка вектора по длине строк
+    sort(strings.begin(), strings.end(), compareByLength);
+    for (int i = 0; i < strings.size(); i++) {
+        QString strToCompare = strings.at(i);
+        for (int j = i + 1; j < strings.size(); j++)
+            if (strToCompare == strings.at(j))
+                strings.erase(strings.begin() + j);
+    }
+    int max_str_num = 0;
+    while (max_str_num < strings.size() && strings.at(max_str_num).size() == max_size)
+        max_str_num++;
+    int i = 0;
     int pr_num = 1;
+    while (i < max_str_num) {
+        QString key = "S";
+        QString two_last = "";
+        for (int ii = strings.at(i).size() - 2; ii > -1 && ii < strings.at(i).size(); ii++)
+            two_last += strings.at(i).at(ii);
+        bool fl = true;
+        for (int j = 0; j < strings.at(i).size() && fl; j++) {
+            if (strings.at(i).size() - 2 == j) {
+                for (int k = max_str_num; k < strings.size() && fl; k++) {
+                        QString two_last1 = "";
+                        for (int ii = strings.at(k).size() - 2; ii > -1 && ii < strings.at(k).size(); ii++)
+                            two_last1 += strings.at(k).at(ii);
+
+                        if (two_last1 != two_last)
+                            fl = false;
+                }
+            }
+            if (fl) {
+                if (j == 0)
+                    key = "S";
+                else
+                    key = "A" + QString::number(pr_num - 1);
+                vector<Production> arr = grammar[key];
+                Production str_add;
+                str_add.terminal = strings.at(i).at(j);
+                if (j != strings.at(i).size() - 1)
+                    str_add.non_terminal = "A" + QString::number(pr_num);
+                else
+                    pr_num--;
+                arr.push_back(str_add);
+                grammar[key] = arr;
+                pr_num++;
+            }
+        }
+        if (!fl) {
+            rr_rules.push_back(key);
+            key = "A" + QString::number(pr_num - 1);
+            vector<Production> arr;
+            Production str_add;
+            for (int j = strings.at(i).size() - 2; j < strings.at(i).size() && j > -1; j++)
+                str_add.terminal += strings.at(i).at(j);
+            arr.push_back(str_add);
+            residual_rules.push_back(str_add.terminal);
+            res_rules.push_back(key);
+            ui->listWidget_residual_rules->addItem("Остаточное правило: " + key + " -> " + str_add.terminal);
+            grammar[key] = arr;
+        }
+        i++;
+    }
+    i = max_str_num;
+    while (i < strings.size()) {
+        QString key = "S";
+        for (int j = 0; j < strings.at(i).size(); j++) {
+            vector<Production> arr = grammar[key];
+            bool fl = false;
+            for (int k = 0; k < arr.size(); k++) {
+                if ( (arr.at(k).terminal == strings.at(i).at(j) && arr.at(k).non_terminal != "")
+                    || (arr.at(k).terminal == strings.at(i).at(j) && arr.at(k).non_terminal == "" && j == (strings.at(i).size() - 1)) ) {
+                    fl = true;
+                    key = arr.at(k).non_terminal;
+                    break;
+                }
+            }
+            if (!fl) {
+                if (j == strings.at(i).size() - 1) {
+                    Production str_add;
+                    str_add.terminal = strings.at(i).at(j);
+                    arr.push_back(str_add);
+                    grammar[key] = arr;
+                }
+                else {
+                    Production str_add;
+                    str_add.non_terminal = "A" + QString::number(pr_num);
+                    str_add.terminal = strings.at(i).at(j);
+                    arr.push_back(str_add);
+                    grammar[key] = arr;
+                    key = "A" + QString::number(pr_num);
+                    pr_num++;
+                }
+            }
+        }
+        i++;
+    }
+    int uu = 0;
+    /*int pr_num = 1;
     for (int i = 0; i < strings.size(); i++) {
         if (strings.at(i).size() == max_size) {
-            QString key = "";
+            QString key = "S";
             bool fl = true;
             for (int j = 0; j < strings.at(i).size() && fl; j++) {
                 if (strings.at(i).size() - 2 == j) {
@@ -180,22 +291,22 @@ void MainWindow::on_pushButton_stage_1_clicked()
                 }
             }
         }
-    }
+    }*/
     for (auto iter : grammar) {
         QString str1 = iter.first;
-        QString str2 = iter.second.at(0);
+        QString str2 = iter.second.at(0).terminal + iter.second.at(0).non_terminal;
         for (int i = 1; i < iter.second.size(); i++)
-            str2 += " | " + iter.second.at(i);
+            str2 += " | " + iter.second.at(i).terminal + iter.second.at(i).non_terminal;
         ui->listWidget_stage_1->addItem(str1 + " -> " + str2);
     }
     ui->pushButton_stage_1->setEnabled(false);
     ui->pushButton_stage_2->setEnabled(true);
 }
 
-bool exists(QString str, vector<QString> arr) {
+bool exists(Production str, vector<Production> arr) {
     bool fl = false;
     for (int i = 0; i < arr.size(); i++) {
-        if (str == arr[i]) {
+        if (str.non_terminal == arr[i].non_terminal && str.terminal == arr[i].terminal) {
             fl = true;
             break;
         }
@@ -204,10 +315,15 @@ bool exists(QString str, vector<QString> arr) {
 }
 
 void MainWindow::step2() {
+    /*for (auto iter : grammar) {
+        for (int i = 0; i < iter.second.size(); i++) {
+
+        }
+    }*/
     for (int i = 0; i < residual_rules.size(); i++) {
-        vector<QString> arr = grammar[res_rules[i]];
+        vector<Production> arr = grammar[res_rules[i]];
         for (int j = 0; j < arr.size(); j++) {
-            if (arr[j] == residual_rules[i])
+            if (arr[j].terminal == residual_rules[i])
                 arr.erase(arr.begin() + j);
         }
         if (arr.empty())
@@ -216,21 +332,18 @@ void MainWindow::step2() {
             grammar[res_rules[i]] = arr;
     }
     for (int i = 0; i < rr_rules.size(); i++) {
-        vector<QString> arr = grammar[rr_rules[i]];
+        vector<Production> arr = grammar[rr_rules[i]];
         for (int j = 0; j < arr.size(); j++) {
-            QString str = "";
-            for (int k = 1; k < arr.at(j).size(); k++)
-                str += arr.at(j).at(k);
-            if (str == res_rules[i])
-                arr[j] = arr.at(j).at(0) + rr_rules[i];
+            if (arr.at(j).non_terminal == res_rules[i])
+                arr[j].non_terminal = rr_rules[i];
         }
         grammar[rr_rules[i]] = arr;
     }
     for (int i = 0; i < res_rules.size(); i++) {
         auto iter = grammar.find(res_rules[i]);
         if (iter != grammar.end()) {
-            vector<QString> arr1 = grammar.at(res_rules[i]);
-            vector<QString> arr2 = grammar.at(rr_rules[i]);
+            vector<Production> arr1 = grammar.at(res_rules[i]);
+            vector<Production> arr2 = grammar.at(rr_rules[i]);
             for (int j = 0; j < arr1.size(); j++) {
                 if (!exists(arr1.at(j), arr2))
                     arr2.push_back(arr1.at(j));
@@ -247,9 +360,9 @@ void MainWindow::on_pushButton_stage_2_clicked()
     ui->listWidget_stage_2->clear();
     for (auto iter : grammar) {
         QString str1 = iter.first;
-        QString str2 = iter.second.at(0);
+        QString str2 = iter.second.at(0).terminal + iter.second.at(0).non_terminal;
         for (int i = 1; i < iter.second.size(); i++)
-            str2 += " | " + iter.second.at(i);
+            str2 += " | " + iter.second.at(i).terminal + iter.second.at(i).non_terminal;
         ui->listWidget_stage_2->addItem(str1 + " -> " + str2);
     }
     ui->pushButton_stage_2->setEnabled(false);
@@ -262,28 +375,20 @@ bool MainWindow::checkOver() {
         wasChanged = false;
         vector<QString> grammar_c;
         for (auto iter1 = grammar.begin(); iter1 != grammar.end(); ++iter1) {
-            bool fl1 = true;
+            bool fl1 = false;
             for (int i = 0; i < iter1->second.size(); i++) {
-                QString str1 = "";
-                for (int j = 1; j < iter1->second.at(i).size(); j++) {
-                    str1 += iter1->second.at(i).at(j);
-                }
-                if (str1 != iter1->first && str1 != "") {
-                    fl1 = false;
+                if (iter1->second.at(i).non_terminal == iter1->first/*iter1->second.at(i).non_terminal != iter1->first && iter1->second.at(i).non_terminal != ""*/) {
+                    fl1 = true;
                     break;
                 }
             }
             if (fl1) {
                 for (auto iter2 = next(iter1); iter2 != grammar.end(); ++iter2) {
                     if (iter1->second.size() == iter2->second.size()) {
-                        bool fl2 = true;
+                        bool fl2 = false;
                         for (int i = 0; i < iter2->second.size(); i++) {
-                            QString str2 = "";
-                            for (int j = 1; j < iter2->second.at(i).size(); j++) {
-                                str2 += iter2->second.at(i).at(j);
-                            }
-                            if (str2 != iter2->first && str2 != "") {
-                                fl2 = false;
+                            if (iter2->second.at(i).non_terminal == iter2->first/*iter2->second.at(i).non_terminal != iter2->first && iter2->second.at(i).non_terminal != ""*/) {
+                                fl2 = true;
                                 break;
                             }
                         }
@@ -291,9 +396,9 @@ bool MainWindow::checkOver() {
                             for (int i = 0; i < iter2->second.size(); i++) {
                                 fl2 = false;
                                 for (int j = 0; j < iter1->second.size(); j++) {
-                                    if (iter2->second.at(i).at(0) == iter1->second.at(j).at(0)
-                                        && ( (iter2->second.at(i).size() > 1 & iter1->second.at(j).size() > 1)
-                                        || (iter2->second.at(i).size() == 1 & iter1->second.at(j).size() == 1)
+                                    if (iter2->second.at(i).terminal == iter1->second.at(j).terminal
+                                        && ( (iter2->second.at(i).non_terminal != "" & iter1->second.at(j).non_terminal != "")
+                                        || (iter2->second.at(i).non_terminal == "" & iter1->second.at(j).non_terminal == "")
                                             /*|| (iter2->second.at(i).size() == 1 & iter1->second.at(i).size() == 1)*/ )  ) {
                                         fl2 = true;
                                         break;
@@ -324,18 +429,15 @@ bool MainWindow::checkOver() {
             }
             for (auto iter = grammar.begin(); iter != grammar.end(); ++iter) {
                 for (int i = 0; i < iter->second.size(); i++) {
-                    QString str = "";
-                    for (int j = 1; j < iter->second.at(i).size(); j++)
-                        str += iter->second.at(i).at(j);
                     bool fl = false;
-                    for (int i = 1; i < grammar_c.size(); i++)
-                        if (grammar_c.at(i) == str) {
+                    for (int j = 1; j < grammar_c.size(); j++)
+                        if (grammar_c.at(j) == iter->second.at(i).non_terminal) {
                             fl = true;
                             break;
                         }
                     if (fl) {
                         //if (iter->second.size() > 1) {
-                            iter->second.at(i) = iter->second.at(i).at(0) + grammar_c.at(0);
+                            iter->second.at(i).non_terminal = grammar_c.at(0);
                             grammar[iter->first] = iter->second;
                         //}
                     }
@@ -352,6 +454,7 @@ bool MainWindow::checkOver2() {
     bool wasChanged = true;
     while (wasChanged) {
         wasChanged = false;
+        vector<QString> toDel;
         for (auto iter1 = grammar.begin(); iter1 != grammar.end(); ++iter1) {
             for (auto iter2 = next(iter1); iter2 != grammar.end(); ++iter2) {
                 if (iter1->second.size() == iter2->second.size()) {
@@ -359,9 +462,10 @@ bool MainWindow::checkOver2() {
                     for (int i = 0; i < iter2->second.size(); i++) {
                         fl2 = false;
                         for (int j = 0; j < iter1->second.size(); j++) {
-                            if (iter2->second.at(i).at(0) == iter1->second.at(j).at(0)
-                                && ( (iter2->second.at(i).size() > 1 & iter1->second.at(j).size() > 1)
-                                    || (iter2->second.at(i).size() == 1 & iter1->second.at(j).size() == 1) )) {
+                            if (iter2->second.at(i).terminal == iter1->second.at(j).terminal
+                                && ( (iter2->second.at(i).non_terminal != "" & iter1->second.at(j).non_terminal != "")
+                                    || (iter2->second.at(i).non_terminal == "" & iter1->second.at(j).non_terminal == "")
+                                    || iter1->second == iter2->second )) {
                                 fl2 = true;
                                 break;
                             }
@@ -372,23 +476,28 @@ bool MainWindow::checkOver2() {
                     }
                     if (fl2) {
                         for (int i = 0; i < iter2->second.size(); i++) {
-                            QString str2 = "";
-                            for (int j = 1; j < iter2->second.at(i).size(); j++)
-                                str2 += iter2->second.at(i).at(j);
-                            QString str1 = "";
-                            for (int j = 1; j < iter1->second.at(i).size(); j++)
-                                str1 += iter1->second.at(i).at(j);
-                            if (iter2->first == str2 && iter2->first == str1) {
-                                iter1->second[i] = iter1->second.at(i).at(0) + iter1->first;
+                            if (iter2->first == iter2->second.at(i).non_terminal && iter2->first == iter1->second.at(i).non_terminal) {
+                                iter1->second[i].non_terminal = iter1->first;
                                 wasChanged = true;
                             }
-                            if (iter1->first == str1 && iter1->first == str2) {
-                                iter2->second[i] = iter2->second.at(i).at(0) + iter2->first;
+                            if (iter1->first == iter1->second.at(i).non_terminal && iter1->first == iter2->second.at(i).non_terminal) {
+                                iter2->second[i].non_terminal = iter2->first;
                                 wasChanged = true;
                             }
-                            if (iter1->first == str2 && iter2->first == str1) {
-                                iter1->second[i] = iter1->second.at(i).at(0) + iter1->first;
-                                iter2->second[i] = iter2->second.at(i).at(0) + iter2->first;
+                            if (iter1->first == iter2->second.at(i).non_terminal && iter2->first == iter1->second.at(i).non_terminal) {
+                                iter1->second[i].non_terminal = iter1->first;
+                                iter2->second[i].non_terminal = iter2->first;
+                                wasChanged = true;
+                            }
+                            if (iter1->second == iter2->second) {
+                                for (auto iter11 = grammar.begin(); iter11 != grammar.end(); ++iter11) {
+                                    for (int i = 0; i < iter11->second.size(); i++)
+                                        if (iter11->second.at(i).non_terminal == iter2->first) {
+                                            iter11->second.at(i).non_terminal = iter1->first;
+                                            grammar[iter11->first] = iter11->second;
+                                        }
+                                }
+                                toDel.push_back(iter2->first);
                                 wasChanged = true;
                             }
                         }
@@ -396,16 +505,20 @@ bool MainWindow::checkOver2() {
                 }
             }
         }
-        if (wasChanged)
+        if (wasChanged) {
+            for (int i = 0; i < toDel.size(); i++)
+                grammar.erase(toDel.at(i));
             checkOver();
+            toDel.clear();
+        }
     }
     return true;
 }
-bool vectorIncludes(const vector<QString>& haystack, const vector<QString>& needle) {
-    for (const QString& needleElement : needle) {
+bool vectorIncludes(const vector<Production>& haystack, const vector<Production>& needle) {
+    for (const Production& needleElement : needle) {
         bool found = false;
-        for (const QString& haystackElement : haystack) {
-            if (haystackElement == needleElement) {
+        for (const Production& haystackElement : haystack) {
+            if (haystackElement.non_terminal == needleElement.non_terminal && haystackElement.terminal == needleElement.terminal) {
                 found = true;
                 break;
             }
@@ -419,6 +532,7 @@ bool vectorIncludes(const vector<QString>& haystack, const vector<QString>& need
 bool MainWindow::checkOver3() {
     bool wasChanged = true;
     vector<QString> vect;
+    int ie = 0;
     while (wasChanged) {
         wasChanged = false;
         for (auto iter1 = grammar.begin(); iter1 != grammar.end(); ++iter1) {
@@ -444,11 +558,21 @@ bool MainWindow::checkOver3() {
             }
         }
         if (wasChanged) {
-            map<QString, vector<QString>> gr = grammar;
+            map<QString, vector<Production>> gr = grammar;
             //step2();
             checkOver();
             checkOver2();
-            if (gr == grammar) {
+            bool flag = false;
+            for (auto iter1 = grammar.begin(); iter1 != grammar.end(); ++iter1) {
+                for (auto iter2 = gr.begin(); iter2 != gr.end(); ++iter2) {
+                    if (iter1 != iter2)
+                        flag = true;
+                }
+            }
+            if (flag) {
+                ie++;
+            }
+            if (!flag) {
                 /*for (auto& iter : grammar) {
                     for (int i = 0; i < iter.second.size(); i++) {
                         QString str = "";
@@ -461,8 +585,8 @@ bool MainWindow::checkOver3() {
                 }
                 grammar.erase(vect.at(1));*/
                 break;
-                vect.clear();
             }
+            vect.clear();
         }
     }
     return true;
@@ -476,9 +600,9 @@ void MainWindow::on_pushButton_stage_3_clicked()
     checkOver3();
     for (auto iter : grammar) {
         QString str1 = iter.first;
-        QString str2 = iter.second.at(0);
+        QString str2 = iter.second.at(0).terminal + iter.second.at(0).non_terminal;
         for (int i = 1; i < iter.second.size(); i++)
-            str2 += " | " + iter.second.at(i);
+            str2 += " | " + iter.second.at(i).terminal + iter.second.at(i).non_terminal;
         ui->listWidget_stage_3->addItem(str1 + " -> " + str2);
     }
     ui->pushButton_stage_3->setEnabled(false);
@@ -493,24 +617,21 @@ void MainWindow::on_pushButton_gen_clicked()
     QString out_str = "";
     QString tree_str = "";
     while (1) {
-        vector<QString> vect = grammar[str];
+        vector<Production> vect = grammar[str];
         random_device rd;
         mt19937 gen(rd());
         uniform_int_distribution<> dis(0, vect.size() - 1);
         int rNum = dis(gen);
-        tree_str += str + " -> " + vect.at(rNum) + "; " ;
-        if (vect.at(rNum).size() == 1) {
-            out_str += vect.at(rNum).at(0);
+        tree_str += str + " -> " + vect.at(rNum).terminal + vect.at(rNum).non_terminal + "; " ;
+        if (vect.at(rNum).non_terminal == "") {
+            out_str += vect.at(rNum).terminal;
             break;
         }
         else {
-            out_str += vect.at(rNum).at(0);
-            str = "";
-            for (int i = 1; i < vect.at(rNum).size(); i++)
-                str += vect.at(rNum).at(i);
+            out_str += vect.at(rNum).terminal;
+            str = vect.at(rNum).non_terminal;
         }
     }
     out_str += "        " + tree_str;
     ui->listWidget_gen->addItem(out_str);
 }
-
